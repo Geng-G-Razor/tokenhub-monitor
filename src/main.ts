@@ -43,6 +43,10 @@ interface PackageData {
 }
 
 // ---- Formatters -------------------------------------------------------------
+/// Full number (e.g. "1,234,567") — for variable usage counts where
+/// abbreviations like "1.2K" would hide meaningful changes.
+const num = (n: number) => n.toLocaleString("en-US");
+/// Compact number (e.g. "1.2K") — for fixed quotas that stay stable.
 const compact = (n: number) =>
   n.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
@@ -126,7 +130,7 @@ function render(p: PackageData) {
   // Quota progress
   const used = p.total_quota - p.remaining_quota;
   const quotaPct = p.total_quota > 0 ? (used / p.total_quota) * 100 : 0;
-  $("quota-text").textContent = `${compact(p.used_monthly)} / ${compact(p.total_quota)} ${p.billing_unit}`;
+  $("quota-text").textContent = `${num(p.used_monthly)} / ${compact(p.total_quota)} ${p.billing_unit}`;
   $("quota-bar").style.width = `${Math.min(quotaPct, 100)}%`;
 
   // Weekly progress
@@ -134,15 +138,15 @@ function render(p: PackageData) {
   if (p.weekly_limit && p.weekly_limit > 0) {
     weeklyGroup.classList.remove("hidden");
     const wkPct = (p.used_weekly / p.weekly_limit) * 100;
-    $("weekly-text").textContent = `${compact(p.used_weekly)} / ${compact(p.weekly_limit)} ${p.billing_unit}`;
+    $("weekly-text").textContent = `${num(p.used_weekly)} / ${compact(p.weekly_limit)} ${p.billing_unit}`;
     $("weekly-bar").style.width = `${Math.min(wkPct, 100)}%`;
   } else {
     weeklyGroup.classList.add("hidden");
   }
 
   // Metrics grid
-  $("used-weekly").textContent = compact(p.used_weekly);
-  $("used-monthly").textContent = compact(p.used_monthly);
+  $("used-weekly").textContent = num(p.used_weekly);
+  $("used-monthly").textContent = num(p.used_monthly);
   $("rpm-limit").textContent = String(p.rpm_total_limit);
 
   // Detail rows
