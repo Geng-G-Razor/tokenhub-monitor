@@ -23,7 +23,7 @@ thiserror = "2"
 
 # Platform-specific: tauri + macos-private-api only on macOS
 [target.'cfg(target_os = "macos")'.dependencies]
-tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+tauri = { version = "2", features = ["tray-icon"] }
 keyring = { version = "3", features = ["apple-native"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
