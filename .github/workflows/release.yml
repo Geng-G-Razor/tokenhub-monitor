@@ -1,79 +1,91 @@
 name: Release
-
 on:
   push:
-    tags:
-      - "v*"
+    tags: ['v*']
 
 permissions:
   contents: write
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build Tauri app (Windows)
-        uses: tauri-apps/tauri-action@v2
-        id: tauri-build
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: ${{ github.ref_name }}
-          releaseBody: |
-            请查看 Release Notes 获取详细信息。
-          releaseDraft: false
-          prerelease: false
-
   build-macos:
     runs-on: macos-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: 22
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
           cache: pnpm
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build Tauri app (macOS)
-        uses: tauri-apps/tauri-action@v2
-        id: tauri-build
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: ${{ github.ref_name }}
-          releaseBody: |
-            请查看 Release Notes 获取详细信息。
-          releaseDraft: false
-          prerelease: false
-          args: --bundles dmg
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app (aarch64)
+        run: pnpm tauri build --target aarch64-apple-darwin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TokenHub-Monitor-macOS-arm64
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app
+        run: pnpm tauri build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TokenHub-Monitor-Windows
+          path: src-tauri/target/release/bundle/
+
+  create-release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: TokenHub-Monitor-*
+          merge-multiple: true
+
+      - name: Extract version
+        run: echo "APP_VERSION=$(jq -r .version src-tauri/tauri.conf.json)" >> $GITHUB_ENV
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: |
+            **/*.dmg
+            **/*.msi
+            **/*.exe
+            **/*.app
+          artifactErrorsFailBuild: true
+          draft: true
+          generateReleaseNotes: true
+          commit: main
+          tag: v${{ env.APP_VERSION }}
+          name: v${{ env.APP_VERSION }}
