@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TokenHub Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Loading state -->
+      <section id="view-loading" class="view">
+        <div class="spinner"></div>
+        <p class="muted">连接中…</p>
+      </section>
+
+      <!-- Login view: paste Master Key -->
+      <section id="view-login" class="view hidden">
+        <header class="login-head">
+          <div class="logo">🔑</div>
+          <h1>TokenHub Monitor</h1>
+          <p class="muted">粘贴 Master Key 查看套餐配额</p>
+        </header>
+        <form id="login-form" autocomplete="off">
+          <label class="field">
+            <span>Master Key</span>
+            <input
+              id="master-key"
+              type="password"
+              required
+              placeholder="mk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              autocomplete="off"
+            />
+          </label>
+          <p class="hint">
+            从浏览器 DevTools → 请求头中复制
+            <code>Authorization: Bearer mk_xxx</code>
+          </p>
+          <p id="login-error" class="error hidden"></p>
+          <button id="login-btn" type="submit" class="primary">保存并查看</button>
+        </form>
+        <button id="quit-btn-login" class="ghost quit" style="margin-top:12px">退出应用</button>
+      </section>
+
+      <!-- Dashboard view -->
+      <section id="view-dash" class="view hidden">
+        <header class="dash-head">
+          <div class="plan-info">
+            <div class="plan-name" id="plan-name">—</div>
+            <span class="badge" id="plan-status">—</span>
+          </div>
+          <button id="refresh-btn" class="icon-btn" title="刷新" aria-label="刷新"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/></svg></button>
+        </header>
+
+        <!-- Quota progress -->
+        <div class="progress-group">
+          <div class="progress-label">
+            <span>本月配额</span>
+            <span class="num" id="quota-text">0 / 0</span>
+          </div>
+          <div class="progress">
+            <i id="quota-bar" style="width:0%"></i>
+          </div>
+        </div>
+
+        <!-- Weekly progress (if has weekly limit) -->
+        <div class="progress-group hidden" id="weekly-group">
+          <div class="progress-label">
+            <span>本周用量</span>
+            <span class="num" id="weekly-text">0 / 0</span>
+          </div>
+          <div class="progress progress-warning">
+            <i id="weekly-bar" style="width:0%"></i>
+          </div>
+        </div>
+
+        <div class="section-title">指标</div>
+        <div class="grid metrics-grid">
+          <div class="cell">
+            <div class="num" id="used-weekly">0</div>
+            <div class="label">本周已用</div>
+          </div>
+          <div class="cell">
+            <div class="num" id="used-monthly">—</div>
+            <div class="label">本月已用</div>
+          </div>
+          <div class="cell">
+            <div class="num" id="rpm-limit">0</div>
+            <div class="label">RPM 上限</div>
+          </div>
+        </div>
+
+        <div class="section-title">详情</div>
+        <div id="details" class="details">
+          <div class="detail-row">
+            <span class="detail-label">计费单位</span>
+            <span class="detail-value" id="billing-unit">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">月到期时间</span>
+            <span class="detail-value" id="expire-at">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">周重置时间</span>
+            <span class="detail-value" id="reset-at">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">支持模型</span>
+            <span class="detail-value" id="models-list"></span>
+          </div>
+        </div>
+
+        <footer class="dash-foot">
+          <select id="interval">
+            <option value="60000" selected>每 1 分钟</option>
+            <option value="300000">每 5 分钟</option>
+            <option value="600000">每 10 分钟</option>
+            <option value="1800000">每 30 分钟</option>
+          </select>
+          <span class="muted" id="updated-at">—</span>
+          <div class="foot-actions">
+            <button id="logout-btn" class="ghost">清除 Key</button>
+            <button id="quit-btn" class="ghost quit">退出</button>
+          </div>
+        </footer>
+      </section>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
