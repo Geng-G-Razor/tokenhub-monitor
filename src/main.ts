@@ -274,6 +274,11 @@ async function boot() {
     appEl.addEventListener("mouseleave", () => invoke("set_mouse_in_window", { inWindow: false }));
   }
 
+  // On Windows, WindowEvent::Focused is unreliable for transparent /
+  // alwaysOnTop / skipTaskbar windows.  The webview blur event is a
+  // more dependable signal that the user clicked elsewhere.
+  window.addEventListener("blur", () => invoke("start_hide_timer_cmd"));
+
   // When the popup becomes visible, refresh immediately.
   try {
     const win = getCurrentWindow();

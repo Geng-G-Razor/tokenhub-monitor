@@ -34,6 +34,30 @@ static MOUSE_ON_TRAY: AtomicBool = AtomicBool::new(false);
 /// Mouse is hovering inside the popup window — cancel auto-hide.
 static MOUSE_IN_WINDOW: AtomicBool = AtomicBool::new(false);
 
+/// Start a deferred auto-hide timer.  The window hides only if, after
+/// `HIDE_DELAY`, all of these hold: PENDING_HIDE is still true,
+/// ALLOW_AUTO_HIDE is true, and neither tray nor popup is hovered.
+/// Safe to call multiple times — only the last timer's verdict matters.
+fn start_hide_timer(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        if !win.is_visible().unwrap_or(false) {
+            return;
+        }
+        PENDING_HIDE.store(true, Ordering::SeqCst);
+        let win = win.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(HIDE_DELAY);
+            if PENDING_HIDE.load(Ordering::SeqCst)
+                && ALLOW_AUTO_HIDE.load(Ordering::SeqCst)
+                && !MOUSE_ON_TRAY.load(Ordering::SeqCst)
+                && !MOUSE_IN_WINDOW.load(Ordering::SeqCst)
+            {
+                let _ = win.hide();
+            }
+        });
+    }
+}
+
 /// Y-coordinate anchor (logical pixels) of the click that opened the window.
 /// Used on Windows to keep the window's bottom edge at the correct position
 /// when `fit_height` adjusts the height.
@@ -139,28 +163,10 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
                 }
                 TrayIconEvent::Leave { .. } => {
                     MOUSE_ON_TRAY.store(false, Ordering::SeqCst);
-                    // If the window is visible but not focused and the mouse
-                    // isn't in the popup, start the auto-hide timer.
-                    let app = tray.app_handle();
-                    if let Some(win) = app.get_webview_window("main") {
-                        if win.is_visible().unwrap_or(false)
-                            && !win.is_focused().unwrap_or(true)
-                            && !MOUSE_IN_WINDOW.load(Ordering::SeqCst)
-                        {
-                            PENDING_HIDE.store(true, Ordering::SeqCst);
-                            let win = win.clone();
-                            std::thread::spawn(move || {
-                                std::thread::sleep(HIDE_DELAY);
-                                if PENDING_HIDE.load(Ordering::SeqCst)
-                                    && ALLOW_AUTO_HIDE.load(Ordering::SeqCst)
-                                    && !MOUSE_ON_TRAY.load(Ordering::SeqCst)
-                                    && !MOUSE_IN_WINDOW.load(Ordering::SeqCst)
-                                {
-                                    let _ = win.hide();
-                                }
-                            });
-                        }
-                    }
+                    // Window visible + mouse away from both tray and popup → start timer.
+                    // Focus events are unreliable on Windows for this window style,
+                    // so we rely on mouse-position signals instead.
+                    start_hide_timer(&tray.app_handle());
                 }
                 _ => {}
             }
@@ -183,10 +189,22 @@ fn set_auto_hide(enabled: bool) {
 /// Let the backend know whether the mouse cursor is inside the popup window.
 /// The frontend fires this via mouseenter / mouseleave on the app root.
 #[tauri::command]
-fn set_mouse_in_window(in_window: bool) {
+fn set_mouse_in_window(app: tauri::AppHandle, in_window: bool) {
     MOUSE_IN_WINDOW.store(in_window, Ordering::SeqCst);
     if in_window {
         PENDING_HIDE.store(false, Ordering::SeqCst);
+    } else if ALLOW_AUTO_HIDE.load(Ordering::SeqCst) {
+        start_hide_timer(&app);
+    }
+}
+
+/// Frontend-facing command so the webview can trigger a hide timer
+/// (e.g. from a window `blur` event that the Rust WindowEvent layer
+/// doesn't reliably emit on Windows).
+#[tauri::command]
+fn start_hide_timer_cmd(app: tauri::AppHandle) {
+    if ALLOW_AUTO_HIDE.load(Ordering::SeqCst) {
+        start_hide_timer(&app);
     }
 }
 
@@ -243,6 +261,7 @@ pub fn run() {
             commands::fetch_package,
             set_auto_hide,
             set_mouse_in_window,
+            start_hide_timer_cmd,
             quit_app,
             set_tray_title,
             fit_height,
@@ -255,20 +274,10 @@ pub fn run() {
         })
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::Focused(false) => {
-                // Delay hiding — if the mouse comes back (tray or popup)
-                // before the timer fires the hide is cancelled.
-                PENDING_HIDE.store(true, Ordering::SeqCst);
-                let win = window.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(HIDE_DELAY);
-                    if PENDING_HIDE.load(Ordering::SeqCst)
-                        && ALLOW_AUTO_HIDE.load(Ordering::SeqCst)
-                        && !MOUSE_ON_TRAY.load(Ordering::SeqCst)
-                        && !MOUSE_IN_WINDOW.load(Ordering::SeqCst)
-                    {
-                        let _ = win.hide();
-                    }
-                });
+                // Focus events are unreliable on Windows for our window style.
+                // This path still fires on macOS; Windows relies on mouse-position
+                // and blur signals instead.
+                start_hide_timer(window.app_handle());
             }
             tauri::WindowEvent::Focused(true) => {
                 // Window came back — cancel any pending delayed hide.
