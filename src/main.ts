@@ -106,10 +106,7 @@ function show(view: "loading" | "login" | "dash") {
 async function fitHeight() {
   const el = document.getElementById("view-dash");
   if (!el) return;
-  const pad =
-    parseFloat(getComputedStyle(document.body).paddingTop) +
-    parseFloat(getComputedStyle(document.body).paddingBottom);
-  const h = Math.ceil(el.getBoundingClientRect().height + pad);
+  const h = Math.ceil(el.getBoundingClientRect().height);
   try {
     await invoke("fit_height", { height: h });
   } catch {
