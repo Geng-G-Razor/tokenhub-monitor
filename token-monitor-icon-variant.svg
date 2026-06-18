@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Token Monitor App Icon — Variant</title>
+  <desc>Flat minimal teal-cyan app icon for Token Monitor — token monitor application (variant)</desc>
+
+  <defs>
+    <!-- 渐变背景 -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0B525B"/>
+      <stop offset="100%" stop-color="#0A3A42"/>
+    </linearGradient>
+
+    <!-- 外圈渐变 -->
+    <linearGradient id="ringGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1A8A92"/>
+      <stop offset="100%" stop-color="#0D7377"/>
+    </linearGradient>
+
+    <!-- 内圈渐变 -->
+    <linearGradient id="innerGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#0B525B"/>
+      <stop offset="100%" stop-color="#083D44"/>
+    </linearGradient>
+
+    <!-- 中心图标渐变 -->
+    <linearGradient id="iconGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6EE7D4"/>
+      <stop offset="100%" stop-color="#34D399"/>
+    </linearGradient>
+
+    <clipPath id="iconShape">
+      <rect x="0" y="0" width="512" height="512" rx="72" ry="72"/>
+    </clipPath>
+  </defs>
+
+  <!-- 底色 -->
+  <rect x="0" y="0" width="512" height="512" rx="72" ry="72" fill="url(#bgGrad)"/>
+
+  <!-- 外圈齿轮环 -->
+  <circle cx="256" cy="256" r="154" fill="url(#ringGrad)" clip-path="url(#iconShape)"/>
+  <!-- 内圈 -->
+  <circle cx="256" cy="256" r="102" fill="url(#innerGrad)" clip-path="url(#iconShape)"/>
+
+  <!-- 齿轮刻度 - 上下（稍宽、更圆润） -->
+  <rect x="238" y="84" width="16" height="52" rx="8" fill="#4ECDC4"/>
+  <rect x="258" y="84" width="16" height="52" rx="8" fill="#4ECDC4"/>
+  <rect x="238" y="368" width="16" height="52" rx="8" fill="#4ECDC4"/>
+  <rect x="258" y="368" width="16" height="52" rx="8" fill="#4ECDC4"/>
+
+  <!-- 齿轮刻度 - 左右（稍微拉长） -->
+  <rect x="84" y="242" width="52" height="16" rx="8" fill="#4ECDC4"/>
+  <rect x="368" y="242" width="52" height="16" rx="8" fill="#4ECDC4"/>
+
+  <!-- 齿轮刻度 - 四角 45° -->
+  <rect x="106" y="106" width="52" height="16" rx="8" fill="#4ECDC4" transform="rotate(45 132 114)"/>
+  <rect x="346" y="106" width="52" height="16" rx="8" fill="#4ECDC4" transform="rotate(-45 372 114)"/>
+  <rect x="106" y="382" width="52" height="16" rx="8" fill="#4ECDC4" transform="rotate(-45 132 390)"/>
+  <rect x="346" y="382" width="52" height="16" rx="8" fill="#4ECDC4" transform="rotate(45 372 390)"/>
+
+  <!-- 外环辅助刻度 - 次级短齿 -->
+  <rect x="152" y="72" width="8" height="24" rx="4" fill="#7DDDD8" opacity="0.6"/>
+  <rect x="344" y="72" width="8" height="24" rx="4" fill="#7DDDD8" opacity="0.6"/>
+  <rect x="152" y="408" width="8" height="24" rx="4" fill="#7DDDD8" opacity="0.6"/>
+  <rect x="344" y="408" width="8" height="24" rx="4" fill="#7DDDD8" opacity="0.6"/>
+  <rect x="72" y="148" width="24" height="8" rx="4" fill="#7DDDD8" opacity="0.6"/>
+  <rect x="408" y="148" width="24" height="8" rx="4" fill="#7DDDD8" opacity="0.6"/>
+  <rect x="72" y="348" width="24" height="8" rx="4" fill="#7DDDD8" opacity="0.6"/>
+  <rect x="408" y="348" width="24" height="8" rx="4" fill="#7DDDD8" opacity="0.6"/>
+
+  <!-- 中心动态折线（类似行情走势 + 闪电混合） -->
+  <polygon points="280,175 222,298 262,298 242,395 310,242 268,242 295,175" fill="url(#iconGrad)"/>
+
+  <!-- 内环装饰线 -->
+  <circle cx="256" cy="256" r="90" fill="none" stroke="#0F6B73" stroke-width="2" opacity="0.4"/>
+
+</svg>
