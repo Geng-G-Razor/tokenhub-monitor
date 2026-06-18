@@ -5,13 +5,19 @@ mod commands;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+#[cfg(target_os = "windows")]
+use std::sync::Mutex;
+
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WebviewWindow,
 };
 
 const TRAY_ID: &str = "main-tray";
+#[cfg(target_os = "macos")]
 const HIDE_DELAY: Duration = Duration::from_secs(3);
+#[cfg(not(target_os = "macos"))]
+const HIDE_DELAY: Duration = Duration::from_millis(500);
 /// Popup width in logical pixels. Must match the `width` in tauri.conf.json
 /// and the value used by `fit_height`, otherwise the window visibly resizes
 /// each time the tray is clicked.
@@ -21,8 +27,18 @@ const POPUP_WIDTH: f64 = 340.0;
 /// (e.g. while the login form is active).
 static ALLOW_AUTO_HIDE: AtomicBool = AtomicBool::new(true);
 /// Set on focus-loss, cleared on focus-gain — prevents a delayed hide if the
-/// window regains focus before the 3 s timer fires.
+/// window regains focus before the timer fires.
 static PENDING_HIDE: AtomicBool = AtomicBool::new(false);
+/// Mouse is hovering over the tray icon — cancel auto-hide.
+static MOUSE_ON_TRAY: AtomicBool = AtomicBool::new(false);
+/// Mouse is hovering inside the popup window — cancel auto-hide.
+static MOUSE_IN_WINDOW: AtomicBool = AtomicBool::new(false);
+
+/// Y-coordinate anchor (logical pixels) of the click that opened the window.
+/// Used on Windows to keep the window's bottom edge at the correct position
+/// when `fit_height` adjusts the height.
+#[cfg(target_os = "windows")]
+static ANCHOR_Y: Mutex<Option<f64>> = Mutex::new(None);
 
 /// Show the popup window anchored just below the tray icon on macOS.
 /// The webview is 340 wide; center it under the click x.
@@ -65,6 +81,11 @@ fn show_popup_at(window: &WebviewWindow, x: f64, y: f64) {
     let _ = window.set_size(tauri::LogicalSize::new(w, h));
     let _ = window.show();
     let _ = window.set_focus();
+
+    // Remember the click Y so fit_height can re-anchor the window bottom.
+    if let Ok(mut anchor) = ANCHOR_Y.lock() {
+        *anchor = Some(y);
+    }
 }
 
 /// Fallback for Linux / other platforms.
@@ -92,24 +113,56 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .icon(app.default_window_icon().cloned().expect("missing icon"))
         .tooltip("TokenHub Monitor")
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                position,
-                ..
-            } = event
-            {
-                let app = tray.app_handle();
-                if let Some(win) = app.get_webview_window("main") {
-                    if win.is_visible().unwrap_or(false) {
-                        let _ = win.hide();
-                    } else {
-                        let sf = win.scale_factor().unwrap_or(1.0);
-                        let lx = position.x / sf;
-                        let ly = position.y / sf;
-                        show_popup_at(&win, lx, ly);
+            match event {
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    position,
+                    ..
+                } => {
+                    let app = tray.app_handle();
+                    if let Some(win) = app.get_webview_window("main") {
+                        if win.is_visible().unwrap_or(false) {
+                            let _ = win.hide();
+                        } else {
+                            let sf = win.scale_factor().unwrap_or(1.0);
+                            let lx = position.x / sf;
+                            let ly = position.y / sf;
+                            show_popup_at(&win, lx, ly);
+                        }
                     }
                 }
+                TrayIconEvent::Enter { .. } => {
+                    // Mouse over tray → keep window visible.
+                    MOUSE_ON_TRAY.store(true, Ordering::SeqCst);
+                    PENDING_HIDE.store(false, Ordering::SeqCst);
+                }
+                TrayIconEvent::Leave { .. } => {
+                    MOUSE_ON_TRAY.store(false, Ordering::SeqCst);
+                    // If the window is visible but not focused and the mouse
+                    // isn't in the popup, start the auto-hide timer.
+                    let app = tray.app_handle();
+                    if let Some(win) = app.get_webview_window("main") {
+                        if win.is_visible().unwrap_or(false)
+                            && !win.is_focused().unwrap_or(true)
+                            && !MOUSE_IN_WINDOW.load(Ordering::SeqCst)
+                        {
+                            PENDING_HIDE.store(true, Ordering::SeqCst);
+                            let win = win.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(HIDE_DELAY);
+                                if PENDING_HIDE.load(Ordering::SeqCst)
+                                    && ALLOW_AUTO_HIDE.load(Ordering::SeqCst)
+                                    && !MOUSE_ON_TRAY.load(Ordering::SeqCst)
+                                    && !MOUSE_IN_WINDOW.load(Ordering::SeqCst)
+                                {
+                                    let _ = win.hide();
+                                }
+                            });
+                        }
+                    }
+                }
+                _ => {}
             }
         });
 
@@ -125,6 +178,16 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 #[tauri::command]
 fn set_auto_hide(enabled: bool) {
     ALLOW_AUTO_HIDE.store(enabled, Ordering::SeqCst);
+}
+
+/// Let the backend know whether the mouse cursor is inside the popup window.
+/// The frontend fires this via mouseenter / mouseleave on the app root.
+#[tauri::command]
+fn set_mouse_in_window(in_window: bool) {
+    MOUSE_IN_WINDOW.store(in_window, Ordering::SeqCst);
+    if in_window {
+        PENDING_HIDE.store(false, Ordering::SeqCst);
+    }
 }
 
 /// Quit the application from the UI (no tray menu).
@@ -143,11 +206,29 @@ fn set_tray_title(app: tauri::AppHandle, title: String) {
 }
 
 /// Resize the popup height to match the rendered content. Width stays fixed.
+/// `height` is in logical (CSS) pixels as measured by the frontend.
+/// On Windows the window bottom is also re-anchored to prevent gaps or
+/// overflow near the taskbar.
 #[tauri::command]
 fn fit_height(app: tauri::AppHandle, height: f64) {
     if let Some(win) = app.get_webview_window("main") {
-        let sf = win.scale_factor().unwrap_or(1.0);
-        let _ = win.set_size(tauri::LogicalSize::new(POPUP_WIDTH, height / sf));
+        let _ = win.set_size(tauri::LogicalSize::new(POPUP_WIDTH, height));
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(anchor) = ANCHOR_Y.lock() {
+                if let Some(ay) = *anchor {
+                    let sf = win.scale_factor().unwrap_or(1.0);
+                    if let Ok(pos) = win.outer_position() {
+                        let current_x = pos.to_logical::<f64>(sf).x;
+                        // Keep the window bottom at `ay - 8` (the anchor
+                        // stored when show_popup_at placed the window).
+                        let new_y = (ay - height - 8.0).max(0.0);
+                        let _ = win.set_position(tauri::LogicalPosition::new(current_x, new_y));
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -161,6 +242,7 @@ pub fn run() {
             commands::has_master_key,
             commands::fetch_package,
             set_auto_hide,
+            set_mouse_in_window,
             quit_app,
             set_tray_title,
             fit_height,
@@ -173,15 +255,16 @@ pub fn run() {
         })
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::Focused(false) => {
-                // Delay hiding by 3 s so the user has time to interact with
-                // the login form.  If the window regains focus before the
-                // timer fires the pending hide is cancelled.
+                // Delay hiding — if the mouse comes back (tray or popup)
+                // before the timer fires the hide is cancelled.
                 PENDING_HIDE.store(true, Ordering::SeqCst);
                 let win = window.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(HIDE_DELAY);
                     if PENDING_HIDE.load(Ordering::SeqCst)
                         && ALLOW_AUTO_HIDE.load(Ordering::SeqCst)
+                        && !MOUSE_ON_TRAY.load(Ordering::SeqCst)
+                        && !MOUSE_IN_WINDOW.load(Ordering::SeqCst)
                     {
                         let _ = win.hide();
                     }

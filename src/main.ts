@@ -266,6 +266,14 @@ async function boot() {
     refresh();
   });
 
+  // Let the backend know when the mouse enters / leaves the popup so it
+  // can suppress auto-hide while the user is interacting with the panel.
+  const appEl = document.getElementById("app");
+  if (appEl) {
+    appEl.addEventListener("mouseenter", () => invoke("set_mouse_in_window", { inWindow: true }));
+    appEl.addEventListener("mouseleave", () => invoke("set_mouse_in_window", { inWindow: false }));
+  }
+
   // When the popup becomes visible, refresh immediately.
   try {
     const win = getCurrentWindow();
