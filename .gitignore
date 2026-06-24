@@ -16,3 +16,6 @@ src-tauri/gen/
 # Env / secrets
 .env
 .env.*
+
+# Clone-from-within ghost copy
+/tokenhub-monitor/
