@@ -5,9 +5,16 @@
 `release.yml` 的 `create-release` job 依赖 `needs: [build-macos, build-windows]`，
 **两个 build job 都成功（且无 cleanup 报错）才会自动发版**。
 
-**规则**：任何平台的构建产物一旦在 CI artifact 里冒出来，立刻用 `gh release create` /
-`gh release upload` 手发版，不要等两个都跑完。CI 自动发版只在它历史稳定时才靠；
-本仓库目前 macOS build 仍脆（objc 0.2.7 老宏 + rustc `-D warnings`），不能拖 Windows。
+**规则**：
+
+1. **artifact 一冒出就手发版**：任何平台的构建产物一旦在 CI artifact 里冒出来，
+   立刻用 `gh release create` / `gh release upload` 手发版，不要等两个 build 都跑完。
+   CI 自动发版只在它历史稳定时才靠；本仓库目前 macOS build 仍脆，不能拖 Windows。
+2. **只发用户明确要求的平台**：CI 顺手出了别的平台 artifact 不等于该发。**不要主动
+   把自己不能在本机验证的资产挂上去**——本机是 Windows，就只发 Windows 资产；macOS
+   资产只在用户明确要、且能在 macOS 上验证后再加。
+3. **artifact 在就直接 `gh release create <tag> <asset...>` 或 `gh release upload`**，
+   不要无谓等 `create-release` job 触发。
 
 ## 已知坑
 
