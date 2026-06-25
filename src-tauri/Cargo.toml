@@ -1,6 +1,6 @@
 [package]
 name = "tokenhub-monitor"
-version = "0.1.2"
+version = "0.1.4"
 description = "Cross-platform desktop tray app for monitoring tokenhub.cash package quota"
 authors = ["you"]
 edition = "2021"
@@ -24,6 +24,7 @@ thiserror = "2"
 # Platform-specific: tauri + macos-private-api only on macOS
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+objc = "0.2"
 keyring = { version = "3", features = ["apple-native"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

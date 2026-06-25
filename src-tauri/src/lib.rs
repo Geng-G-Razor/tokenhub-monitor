@@ -270,6 +270,23 @@ pub fn run() {
             // macOS: Dock icon is hidden via LSUIElement=true in Info.plist.
             // Windows: skipTaskbar=true in tauri.conf.json achieves the same.
             build_tray(app)?;
+
+            // macOS: keep the popup out of Cmd+Tab switcher, Mission Control,
+            // and App Exposé by setting the window collection behavior to
+            // Transient (2) | IgnoresCycle (4) = 6.
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                if let Ok(ns_window) = window.ns_window() {
+                    use objc::{msg_send, sel, sel_impl};
+                    unsafe {
+                        let () = msg_send![
+                            ns_window as *mut objc::runtime::Object,
+                            setCollectionBehavior: 6u64
+                        ];
+                    }
+                }
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| match event {
