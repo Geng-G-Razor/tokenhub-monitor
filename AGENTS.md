@@ -7,13 +7,16 @@
 
 **规则**：
 
-1. **artifact 一冒出就手发版**：任何平台的构建产物一旦在 CI artifact 里冒出来，
+1. **本地能直接构建就不要走 tag + CI**：本机是 Windows，`pnpm tauri build` 会直接
+   在 `src-tauri/target/release/bundle/` 产出 msi + nsis 两条资产——CI 只是中间商，
+   用户没明确要 CI 出包就别绕。`gh release create` 手发即可，不打 tag。
+2. **artifact 一冒出就手发版**：任何平台的构建产物一旦在 CI artifact 里冒出来，
    立刻用 `gh release create` / `gh release upload` 手发版，不要等两个 build 都跑完。
    CI 自动发版只在它历史稳定时才靠；本仓库目前 macOS build 仍脆，不能拖 Windows。
-2. **只发用户明确要求的平台**：CI 顺手出了别的平台 artifact 不等于该发。**不要主动
+3. **只发用户明确要求的平台**：CI 顺手出了别的平台 artifact 不等于该发。**不要主动
    把自己不能在本机验证的资产挂上去**——本机是 Windows，就只发 Windows 资产；macOS
    资产只在用户明确要、且能在 macOS 上验证后再加。
-3. **artifact 在就直接 `gh release create <tag> <asset...>` 或 `gh release upload`**，
+4. **artifact 在就直接 `gh release create <tag> <asset...>` 或 `gh release upload`**，
    不要无谓等 `create-release` job 触发。
 
 ## 已知坑
