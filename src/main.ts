@@ -125,7 +125,7 @@ function render(p: PackageData) {
   // Quota progress
   const used = p.total_quota - p.remaining_quota;
   const quotaPct = p.total_quota > 0 ? (used / p.total_quota) * 100 : 0;
-  $("quota-text").textContent = `${num(p.used_monthly)} / ${compact(p.total_quota)} ${p.billing_unit}`;
+  $("quota-text").textContent = `${num(used)} / ${compact(p.total_quota)} ${p.billing_unit}`;
   $("quota-bar").style.width = `${Math.min(quotaPct, 100)}%`;
 
   // Weekly progress
@@ -141,7 +141,7 @@ function render(p: PackageData) {
 
   // Metrics grid
   $("used-weekly").textContent = num(p.used_weekly);
-  $("used-monthly").textContent = num(p.used_monthly);
+  $("used-plan").textContent = num(used);
   $("rpm-limit").textContent = String(p.rpm_total_limit);
 
   // Detail rows
