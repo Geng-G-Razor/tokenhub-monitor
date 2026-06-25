@@ -116,8 +116,6 @@ async function fitHeight() {
 
 // ---- Render -----------------------------------------------------------------
 function render(p: PackageData) {
-  // API 返回的 used_monthly 不准确，用 used_week 代替
-  p.used_monthly = p.used_week;
   // Plan name + status
   $("plan-name").textContent = p.plan_display_name;
   const statusEl = $("plan-status");
