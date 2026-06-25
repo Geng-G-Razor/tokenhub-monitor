@@ -15,7 +15,7 @@ use tauri::{
 
 const TRAY_ID: &str = "main-tray";
 #[cfg(target_os = "macos")]
-const HIDE_DELAY: Duration = Duration::from_secs(3);
+const HIDE_DELAY: Duration = Duration::from_millis(500);
 #[cfg(not(target_os = "macos"))]
 const HIDE_DELAY: Duration = Duration::from_millis(500);
 /// Popup width in logical pixels. Must match the `width` in tauri.conf.json
@@ -78,7 +78,9 @@ fn show_popup_at(window: &WebviewWindow, x: f64, y: f64) {
         .map(|s| s.to_logical(window.scale_factor().unwrap_or(1.0)).height)
         .filter(|h| *h > 1.0)
         .unwrap_or(510.0);
-    let _ = window.set_position(tauri::LogicalPosition::new(x - w / 2.0, y));
+    // Shift down 5 logical pixels so the panel doesn't sit flush against the
+    // menu bar — the macOS menu bar glow can make it feel cramped otherwise.
+    let _ = window.set_position(tauri::LogicalPosition::new(x - w / 2.0, y + 13.0));
     let _ = window.set_size(tauri::LogicalSize::new(w, h));
     let _ = window.show();
     let _ = window.set_focus();
@@ -149,6 +151,9 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
                         if win.is_visible().unwrap_or(false) {
                             let _ = win.hide();
                         } else {
+                            // Cancel any stale hide timer so it doesn't
+                            // close the window we're about to show.
+                            PENDING_HIDE.store(false, Ordering::SeqCst);
                             let sf = win.scale_factor().unwrap_or(1.0);
                             let lx = position.x / sf;
                             let ly = position.y / sf;
@@ -192,6 +197,12 @@ fn set_auto_hide(enabled: bool) {
 fn set_mouse_in_window(app: tauri::AppHandle, in_window: bool) {
     MOUSE_IN_WINDOW.store(in_window, Ordering::SeqCst);
     if in_window {
+        // Mouse entered the panel — it can't simultaneously be over the
+        // tray icon, so clear the flag.  This handles the case where
+        // TrayIconEvent::Leave didn't fire when the mouse moved from the
+        // tray to the panel (occasional on macOS), which would otherwise
+        // leave MOUSE_ON_TRAY stuck at true and block auto-hide forever.
+        MOUSE_ON_TRAY.store(false, Ordering::SeqCst);
         PENDING_HIDE.store(false, Ordering::SeqCst);
     } else if ALLOW_AUTO_HIDE.load(Ordering::SeqCst) {
         start_hide_timer(&app);
@@ -297,8 +308,10 @@ pub fn run() {
                 start_hide_timer(window.app_handle());
             }
             tauri::WindowEvent::Focused(true) => {
-                // Window came back — cancel any pending delayed hide.
-                PENDING_HIDE.store(false, Ordering::SeqCst);
+                // Window came back — refresh data.  Do NOT cancel a pending
+                // delayed hide here: on macOS the floating panel can receive
+                // spurious focus-gain events while the timer is counting down,
+                // which would prevent the window from ever auto-hiding.
             }
             _ => {}
         })
