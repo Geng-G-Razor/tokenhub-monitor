@@ -63,6 +63,16 @@ fn start_hide_timer(app: &tauri::AppHandle) {
 /// when `fit_height` adjusts the height.
 #[cfg(target_os = "windows")]
 static ANCHOR_Y: Mutex<Option<f64>> = Mutex::new(None);
+/// X-coordinate anchor (logical pixels) of the click that opened the window.
+/// Paired with ANCHOR_Y so that fit_height can reconstruct the absolute
+/// position without reading outer_position (which would reintroduce truncation).
+#[cfg(target_os = "windows")]
+static ANCHOR_X: Mutex<Option<f64>> = Mutex::new(None);
+
+/// Last height set by fit_height, used by show_popup_at to break the
+/// outer_size() → set_size → outer_size() feedback loop that accumulates
+/// non-client area (e.g. DWM shadow) on each show/hide cycle.
+static LAST_HEIGHT: std::sync::Mutex<Option<f64>> = std::sync::Mutex::new(None);
 
 /// Show the popup window anchored just below the tray icon on macOS.
 /// The webview is 340 wide; center it under the click x.
@@ -90,27 +100,28 @@ fn show_popup_at(window: &WebviewWindow, x: f64, y: f64) {
 /// Windows taskbar is typically at the bottom, so the window pops upward.
 #[cfg(target_os = "windows")]
 fn show_popup_at(window: &WebviewWindow, x: f64, y: f64) {
-    let sf = window.scale_factor().unwrap_or(1.0);
     let w = POPUP_WIDTH;
-    // Reuse the current fitted height; fall back to 510.
-    let h = window
-        .outer_size()
-        .ok()
-        .map(|s| s.to_logical(sf).height)
-        .filter(|h| *h > 1.0)
-        .unwrap_or(510.0);
+    // Use the last fitted height from fit_height (if any), or fall back to 510.
+    // IMPORTANT: do NOT read outer_size() for this calculation — on Windows the
+    // physical→logical round-trip accumulates non-client area (DWM shadow etc.)
+    // on each show/hide cycle, causing the panel to creep upward.
+    let h = LAST_HEIGHT.lock().ok().and_then(|lh| *lh).unwrap_or(510.0);
     // Center horizontally on the click; position the window so its bottom
     // edge sits 8 px above the click point (near the system tray).
     let pos_x = (x - w / 2.0).max(0.0);
     let pos_y = (y - h - 8.0).max(0.0);
-    let _ = window.set_position(tauri::LogicalPosition::new(pos_x, pos_y));
     let _ = window.set_size(tauri::LogicalSize::new(w, h));
+    let _ = window.set_position(tauri::LogicalPosition::new(pos_x, pos_y));
     let _ = window.show();
     let _ = window.set_focus();
 
-    // Remember the click Y so fit_height can re-anchor the window bottom.
+    // Remember the click anchor so fit_height can re-anchor the window bottom
+    // without reading outer_position (which would accumulate truncation error).
     if let Ok(mut anchor) = ANCHOR_Y.lock() {
         *anchor = Some(y);
+    }
+    if let Ok(mut anchor) = ANCHOR_X.lock() {
+        *anchor = Some(pos_x);
     }
 }
 
@@ -238,30 +249,38 @@ fn set_tray_title(app: tauri::AppHandle, title: String) {
 /// `height` is in logical (CSS) pixels as measured by the frontend.
 /// On Windows the window bottom is also re-anchored to prevent gaps or
 /// overflow near the taskbar.
-#[tauri::command]
-fn fit_height(app: tauri::AppHandle, height: f64) {
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.set_size(tauri::LogicalSize::new(POPUP_WIDTH, height));
+    #[tauri::command]
+    fn fit_height(app: tauri::AppHandle, height: f64) {
+        if let Some(win) = app.get_webview_window("main") {
+            // Remember the height for show_popup_at so it doesn't need to read
+            // outer_size() (which accumulates DWM shadow on each show/hide).
+            if let Ok(mut lh) = LAST_HEIGHT.lock() {
+                *lh = Some(height);
+            }
 
-        #[cfg(target_os = "windows")]
-        {
-            if let Ok(anchor) = ANCHOR_Y.lock() {
-                if let Some(ay) = *anchor {
-                    let sf = win.scale_factor().unwrap_or(1.0);
-                    if let Ok(pos) = win.outer_position() {
-                        let current_x = pos.to_logical::<f64>(sf).x;
-                        // Keep the window bottom at `ay - 8` (the anchor
-                        // stored when show_popup_at placed the window).
-                        let new_y = (ay - height - 8.0).max(0.0);
-                        let _ = win.set_position(tauri::LogicalPosition::new(current_x, new_y));
-                    }
+            let _ = win.set_size(tauri::LogicalSize::new(POPUP_WIDTH, height));
+
+            #[cfg(target_os = "windows")]
+            {
+                // Reconstruct the absolute position from the anchors captured in
+                // show_popup_at — never read outer_position here, because its
+                // physical→logical round-trip accumulates sub-pixel truncation
+                // errors that cause the window to creep upward on each call.
+                let ay = ANCHOR_Y.lock().ok().and_then(|a| *a);
+                let ax = ANCHOR_X.lock().ok().and_then(|a| *a);
+                if let (Some(ay), Some(ax)) = (ay, ax) {
+                    // Keep the window bottom at `ay - 8` (the anchor stored when
+                    // show_popup_at placed the window).
+                    let new_y = (ay - height - 8.0).max(0.0);
+                    // Defend against NaN / Inf.
+                    let new_y = if new_y.is_finite() { new_y } else { 0.0 };
+                    let _ = win.set_position(tauri::LogicalPosition::new(ax, new_y));
                 }
             }
         }
     }
-}
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+    #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
