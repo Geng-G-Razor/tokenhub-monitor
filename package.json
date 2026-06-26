@@ -1,6 +1,6 @@
 {
   "name": "fufei-monitor",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "macOS menu bar app for monitoring fufei.mossx.ai consumption",
   "private": true,
   "type": "module",
